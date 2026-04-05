@@ -95,10 +95,28 @@ export default function StandupModal() {
     setSeeding(true)
 
     console.log('[standup] === FINISH TAPPED ===')
-    console.log('[standup] userId:', userId)
     console.log('[standup] date:', date)
     console.log('[standup] capturedItems:', JSON.stringify(state.capturedItems, null, 2))
-    console.log('[standup] protocolItems:', protocolItems.map(i => ({ id: i.id, label: i.label })))
+
+    // Fetch user and protocol items directly — bypass hook state entirely
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      console.error('[standup] no authenticated user at finish')
+      setSeeding(false)
+      return
+    }
+    console.log('[standup] confirmed user.id:', user.id)
+
+    const { data: protocolRows, error: protocolError } = await supabase
+      .from('protocol_items')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('active', true)
+
+    console.log('[standup] direct protocol fetch:', protocolRows?.length, protocolRows)
+    if (protocolError) console.error('[standup] protocol fetch error:', protocolError)
+
+    const finalProtocolItems = (protocolRows ?? []) as typeof protocolItems
 
     // Build stack/stretch from capturedItems
     let stackItems = state.capturedItems
@@ -128,7 +146,7 @@ export default function StandupModal() {
 
     // Save session
     const { error: sessionError } = await supabase.from('standup_sessions').insert({
-      user_id: userId,
+      user_id: user.id,
       date,
       session_type: 'standup',
       mode: 'chat',
@@ -138,7 +156,7 @@ export default function StandupModal() {
     if (sessionError) console.error('[standup] session insert error:', sessionError)
 
     // Seed daily logs
-    const { error: seedError } = await seedFromStandup(protocolItems, stackItems, stretchItems)
+    const { error: seedError } = await seedFromStandup(finalProtocolItems, stackItems, stretchItems)
     if (seedError) console.error('[standup] seedFromStandup error:', seedError)
     else console.log('[standup] seedFromStandup success')
 
