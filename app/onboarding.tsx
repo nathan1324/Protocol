@@ -99,6 +99,7 @@ export default function OnboardingScreen() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
+      console.log('[onboarding] auth user:', user?.id, user?.email)
       if (!user) throw new Error('Not authenticated')
 
       const allDays = [0, 1, 2, 3, 4, 5, 6]
@@ -112,10 +113,14 @@ export default function OnboardingScreen() {
         active: true,
       }))
 
-      const { error: insertError } = await supabase
+      console.log('[onboarding] inserting protocol_items:', JSON.stringify(rows, null, 2))
+
+      const { data: insertData, error: insertError } = await supabase
         .from('protocol_items')
         .insert(rows)
+        .select()
 
+      console.log('[onboarding] insert result:', insertData?.length, 'rows, error:', insertError)
       if (insertError) throw insertError
 
       // Mark user as onboarded

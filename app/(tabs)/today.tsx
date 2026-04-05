@@ -36,6 +36,25 @@ export default function TodayScreen() {
     if (userId) refetch()
   }, [userId])
 
+  // Diagnostic: log what's in daily_logs
+  useEffect(() => {
+    if (!userId || loading) return
+    console.log('[today] date:', date, 'userId:', userId)
+    console.log('[today] total logs:', logs.length)
+    console.log('[today] logs by type:', logs.map(l => ({ label: l.task_label, type: l.task_type, pts: l.pts_possible })))
+
+    // Raw DB check — query without the hook to rule out hook issues
+    supabase
+      .from('daily_logs')
+      .select('task_label, task_type, pts_possible')
+      .eq('user_id', userId)
+      .eq('date', date)
+      .then(({ data, error }) => {
+        console.log('[today] RAW DB query result:', JSON.stringify(data))
+        if (error) console.error('[today] RAW DB query error:', error)
+      })
+  }, [userId, logs, loading])
+
   const protocolLogs = useMemo(() => logs.filter(l => l.task_type === 'protocol'), [logs])
   const stackLogs = useMemo(() => logs.filter(l => l.task_type === 'stack'), [logs])
   const stretchLogs = useMemo(() => logs.filter(l => l.task_type === 'stretch'), [logs])
