@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Protocol",
+    "slug": "protocol",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "protocol",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0C0C0F"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.protocol.app",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "Protocol uses health data to auto-confirm your workout protocol items.",
+        "NSHealthUpdateUsageDescription": "Protocol reads workout data to credit your protocol items automatically."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0C0C0F"
+      },
+      "package": "com.protocol.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#C49A3C"
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
