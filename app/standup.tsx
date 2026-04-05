@@ -94,15 +94,40 @@ export default function StandupModal() {
     if (!userId || seeding) return
     setSeeding(true)
 
-    const stackItems = state.capturedItems
+    console.log('[standup] === FINISH TAPPED ===')
+    console.log('[standup] userId:', userId)
+    console.log('[standup] date:', date)
+    console.log('[standup] capturedItems:', JSON.stringify(state.capturedItems, null, 2))
+    console.log('[standup] protocolItems:', protocolItems.map(i => ({ id: i.id, label: i.label })))
+
+    // Build stack/stretch from capturedItems
+    let stackItems = state.capturedItems
       .filter(i => i.type === 'stack')
       .map(i => ({ label: i.label }))
-    const stretchItems = state.capturedItems
+    let stretchItems = state.capturedItems
       .filter(i => i.type === 'stretch')
       .map(i => ({ label: i.label }))
 
+    // Fallback: if CAPTURE parsing failed, parse items from the summary message text
+    if (stackItems.length === 0 && stretchItems.length === 0) {
+      console.log('[standup] capturedItems empty — parsing summary text as fallback')
+      const lastAssistant = [...state.messages].reverse().find(m => m.role === 'assistant')
+      if (lastAssistant) {
+        const text = lastAssistant.content
+        console.log('[standup] last assistant message:', text.substring(0, 300))
+        const parsed = parseSummaryText(text)
+        stackItems = parsed.stack
+        stretchItems = parsed.stretch
+        console.log('[standup] fallback parsed stack:', stackItems)
+        console.log('[standup] fallback parsed stretch:', stretchItems)
+      }
+    }
+
+    console.log('[standup] final stackItems:', stackItems)
+    console.log('[standup] final stretchItems:', stretchItems)
+
     // Save session
-    await supabase.from('standup_sessions').insert({
+    const { error: sessionError } = await supabase.from('standup_sessions').insert({
       user_id: userId,
       date,
       session_type: 'standup',
@@ -110,12 +135,55 @@ export default function StandupModal() {
       messages: state.messages,
       duration_sec: 0,
     })
+    if (sessionError) console.error('[standup] session insert error:', sessionError)
 
     // Seed daily logs
-    await seedFromStandup(protocolItems, stackItems, stretchItems)
+    const { error: seedError } = await seedFromStandup(protocolItems, stackItems, stretchItems)
+    if (seedError) console.error('[standup] seedFromStandup error:', seedError)
+    else console.log('[standup] seedFromStandup success')
 
     setSeeding(false)
     router.replace('/(tabs)/today')
+  }
+
+  // Fallback parser: extract stack/stretch items from the summary message text
+  // when CAPTURE JSON parsing fails
+  function parseSummaryText(text: string): {
+    stack: Array<{ label: string }>
+    stretch: Array<{ label: string }>
+  } {
+    const stack: Array<{ label: string }> = []
+    const stretch: Array<{ label: string }> = []
+
+    const lines = text.split('\n')
+    let currentSection: 'protocol' | 'stack' | 'stretch' | null = null
+
+    for (const line of lines) {
+      const lower = line.toLowerCase()
+      if (lower.includes('**protocol**') || lower.includes('protocol (')) {
+        currentSection = 'protocol'
+      } else if (lower.includes('**stack**')) {
+        currentSection = 'stack'
+      } else if (lower.includes('**stretch**') || lower.includes('stretch ★')) {
+        currentSection = 'stretch'
+      } else if (lower.startsWith('potential:')) {
+        currentSection = null
+      } else if (currentSection && (line.trim().startsWith('-') || line.trim().startsWith('•'))) {
+        // Extract label: strip bullet, strip trailing +N points
+        const label = line.trim()
+          .replace(/^[-•]\s*/, '')
+          .replace(/\s*\+\d+\s*$/, '')
+          .trim()
+        if (label && currentSection === 'stack') {
+          stack.push({ label })
+        } else if (label && currentSection === 'stretch') {
+          stretch.push({ label })
+        }
+        // Skip protocol items — they come from protocolItems array
+      }
+    }
+
+    return { stack, stretch }
   }
 
   function renderMessage({ item }: { item: ChatMessage }) {
@@ -186,48 +254,59 @@ export default function StandupModal() {
         }
       />
 
-      {/* Bottom bar: input or finish button */}
-      {state.isComplete ? (
-        <View style={styles.finishContainer}>
-          <Pressable
-            style={[styles.finishButton, seeding && styles.finishButtonDisabled]}
-            onPress={handleFinish}
-            disabled={seeding}
-          >
-            {seeding ? (
-              <ActivityIndicator color={Colors.bgPrimary} size="small" />
-            ) : (
-              <Text style={styles.finishButtonText}>Start the day</Text>
-            )}
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Say something..."
-            placeholderTextColor={Colors.textTertiary}
-            multiline
-            maxLength={500}
-            editable={!state.isLoading}
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-          />
-          <Pressable
-            style={[styles.sendButton, (!input.trim() || state.isLoading) && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!input.trim() || state.isLoading}
-          >
-            {state.isLoading ? (
-              <ActivityIndicator color={Colors.textPrimary} size="small" />
-            ) : (
-              <Text style={styles.sendButtonText}>Send</Text>
-            )}
-          </Pressable>
-        </View>
-      )}
+      {/* Bottom bar */}
+      <View style={styles.bottomBar}>
+        {/* Persistent finish button — always available */}
+        <Pressable
+          style={[
+            styles.finishButton,
+            state.isComplete && styles.finishButtonProminent,
+            seeding && styles.finishButtonDisabled,
+          ]}
+          onPress={handleFinish}
+          disabled={seeding}
+        >
+          {seeding ? (
+            <ActivityIndicator color={state.isComplete ? Colors.bgPrimary : Colors.scoreGold} size="small" />
+          ) : (
+            <Text style={[
+              styles.finishButtonText,
+              state.isComplete && styles.finishButtonTextProminent,
+            ]}>
+              {state.isComplete ? 'Start the day' : 'Finish & start the day'}
+            </Text>
+          )}
+        </Pressable>
+
+        {/* Input row — hidden once summary is delivered */}
+        {!state.isComplete && (
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.textInput}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Say something..."
+              placeholderTextColor={Colors.textTertiary}
+              multiline
+              maxLength={500}
+              editable={!state.isLoading}
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+            />
+            <Pressable
+              style={[styles.sendButton, (!input.trim() || state.isLoading) && styles.sendButtonDisabled]}
+              onPress={handleSend}
+              disabled={!input.trim() || state.isLoading}
+            >
+              {state.isLoading ? (
+                <ActivityIndicator color={Colors.textPrimary} size="small" />
+              ) : (
+                <Text style={styles.sendButtonText}>Send</Text>
+              )}
+            </Pressable>
+          </View>
+        )}
+      </View>
     </KeyboardAvoidingView>
   )
 }
@@ -340,15 +419,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.danger,
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+  bottomBar: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingTop: 10,
     paddingBottom: 34,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     backgroundColor: Colors.bgSurface,
+    gap: 10,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     gap: 10,
   },
   textInput: {
@@ -381,25 +463,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
   },
-  finishContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 34,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    backgroundColor: Colors.bgSurface,
-  },
   finishButton: {
-    backgroundColor: Colors.scoreGold,
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: Colors.bgHighest,
+    borderRadius: 10,
+    paddingVertical: 11,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.scoreGoldBorder,
+  },
+  finishButtonProminent: {
+    backgroundColor: Colors.scoreGold,
+    borderColor: Colors.scoreGold,
   },
   finishButtonDisabled: {
     opacity: 0.6,
   },
   finishButtonText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 14,
+    color: Colors.scoreGold,
+  },
+  finishButtonTextProminent: {
     fontFamily: 'DMSans_600SemiBold',
     fontSize: 16,
     color: Colors.bgPrimary,
