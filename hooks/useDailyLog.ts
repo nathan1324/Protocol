@@ -7,14 +7,18 @@ export function useDailyLog(userId: string, date: string) {
   const [logs, setLogs] = useState<DailyLog[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { fetchLogs() }, [userId, date])
+  useEffect(() => {
+    if (userId) fetchLogs()
+    else setLoading(false)
+  }, [userId, date])
 
   async function fetchLogs() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('daily_logs').select('*')
       .eq('user_id', userId).eq('date', date)
       .order('created_at', { ascending: true })
+    if (error) console.error('[useDailyLog] fetchLogs error:', error)
     setLogs((data as DailyLog[]) ?? [])
     setLoading(false)
   }
@@ -24,13 +28,64 @@ export function useDailyLog(userId: string, date: string) {
     stackItems: Array<{ label: string }>,
     stretchItems: Array<{ label: string }>
   ) {
+    console.log('[useDailyLog] seedFromStandup called with userId:', userId, 'date:', date)
+    console.log('[useDailyLog] protocolItems:', protocolItems.length, 'stackItems:', stackItems.length, 'stretchItems:', stretchItems.length)
+
+    if (!userId) {
+      console.error('[useDailyLog] seedFromStandup: userId is empty, aborting')
+      return { error: { message: 'No user ID' } }
+    }
+
     const rows = [
-      ...protocolItems.map(i => ({ user_id: userId, date, task_label: i.label, task_type: 'protocol' as TaskType, protocol_item_id: i.id, source: 'standup', ...assignTaskPoints('protocol') })),
-      ...stackItems.map(i => ({ user_id: userId, date, task_label: i.label, task_type: 'stack' as TaskType, source: 'standup', ...assignTaskPoints('stack') })),
-      ...stretchItems.map(i => ({ user_id: userId, date, task_label: i.label, task_type: 'stretch' as TaskType, source: 'standup', ...assignTaskPoints('stretch') })),
+      ...protocolItems.map(i => ({
+        user_id: userId,
+        date,
+        task_label: i.label,
+        task_type: 'protocol' as TaskType,
+        protocol_item_id: i.id,
+        source: 'standup' as const,
+        completed: false,
+        completed_at: null,
+        ...assignTaskPoints('protocol'),
+      })),
+      ...stackItems.map(i => ({
+        user_id: userId,
+        date,
+        task_label: i.label,
+        task_type: 'stack' as TaskType,
+        protocol_item_id: null,
+        source: 'standup' as const,
+        completed: false,
+        completed_at: null,
+        ...assignTaskPoints('stack'),
+      })),
+      ...stretchItems.map(i => ({
+        user_id: userId,
+        date,
+        task_label: i.label,
+        task_type: 'stretch' as TaskType,
+        protocol_item_id: null,
+        source: 'standup' as const,
+        completed: false,
+        completed_at: null,
+        ...assignTaskPoints('stretch'),
+      })),
     ]
+
+    console.log('[useDailyLog] inserting rows:', JSON.stringify(rows, null, 2))
+
+    if (rows.length === 0) {
+      console.warn('[useDailyLog] no rows to insert')
+      return { error: null }
+    }
+
     const { error } = await supabase.from('daily_logs').insert(rows)
-    if (!error) await fetchLogs()
+    if (error) {
+      console.error('[useDailyLog] insert error:', JSON.stringify(error))
+    } else {
+      console.log('[useDailyLog] insert success, fetching updated logs')
+      await fetchLogs()
+    }
     return { error }
   }
 
@@ -53,7 +108,9 @@ export function useDailyLog(userId: string, date: string) {
   async function quickAdd(label: string, taskType: TaskType) {
     const { error } = await supabase.from('daily_logs').insert({
       user_id: userId, date, task_label: label, task_type: taskType,
-      source: 'quick_add', ...assignTaskPoints(taskType),
+      source: 'quick_add', protocol_item_id: null,
+      completed: false, completed_at: null,
+      ...assignTaskPoints(taskType),
     })
     if (!error) await fetchLogs()
     return { error }
