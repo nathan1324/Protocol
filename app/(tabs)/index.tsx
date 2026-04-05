@@ -176,6 +176,13 @@ export default function HomeScreen() {
           <Text style={styles.standupCtaText}>Begin standup</Text>
         </Pressable>
       )}
+
+      {/* Close the day — visible after 5pm */}
+      {new Date().getHours() >= 17 && standupDone && (
+        <Pressable style={styles.closeCta} onPress={() => router.push('/close')}>
+          <Text style={styles.closeCtaText}>Close the day</Text>
+        </Pressable>
+      )}
     </ScrollView>
   )
 }
@@ -375,5 +382,21 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_500Medium',
     fontSize: 14,
     color: Colors.textPrimary,
+  },
+
+  // Close CTA
+  closeCta: {
+    marginTop: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  closeCtaText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 15,
+    color: Colors.textSecondary,
   },
 })
