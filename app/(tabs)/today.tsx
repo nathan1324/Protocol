@@ -171,6 +171,11 @@ export default function TodayScreen() {
             <Text style={styles.quickAddButtonPlus}>+</Text>
             <Text style={styles.quickAddButtonText}>Quick add</Text>
           </Pressable>
+          {new Date().getHours() >= 17 && (
+            <Pressable style={styles.closeButton} onPress={() => router.push('/close')}>
+              <Text style={styles.closeButtonText}>Close the day</Text>
+            </Pressable>
+          )}
         </View>
       )}
     </View>
@@ -370,6 +375,18 @@ const styles = StyleSheet.create({
     color: Colors.stackTeal,
   },
   quickAddButtonText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  closeButton: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  closeButtonText: {
     fontFamily: 'DMSans_500Medium',
     fontSize: 14,
     color: Colors.textSecondary,
