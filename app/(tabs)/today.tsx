@@ -302,9 +302,9 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontFamily: 'DMSans_600SemiBold',
-    fontSize: 13,
+    fontSize: 11,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
     flex: 1,
   },
   sectionPts: {
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.bgSurface,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 13,
     marginBottom: 6,
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: Colors.bgHighest,
     gap: 6,
   },
@@ -381,10 +381,11 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
+    marginTop: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: Colors.border,
   },
   closeButtonText: {
     fontFamily: 'DMSans_500Medium',

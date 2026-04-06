@@ -8,7 +8,7 @@ export default function TabLayout() {
       tabBarStyle: { backgroundColor: Colors.bgSurface, borderTopColor: Colors.border, borderTopWidth: 0.5, height: 80 },
       tabBarActiveTintColor: Colors.scoreGold,
       tabBarInactiveTintColor: Colors.textTertiary,
-      tabBarLabelStyle: { fontSize: 9, fontWeight: '600', letterSpacing: 0.04 },
+      tabBarLabelStyle: { fontFamily: 'DMSans_600SemiBold', fontSize: 9, letterSpacing: 0.5 },
     }}>
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="today" options={{ title: 'Today' }} />

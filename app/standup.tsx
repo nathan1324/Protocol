@@ -412,12 +412,14 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: Colors.bgHighest,
+    backgroundColor: Colors.scoreGoldBg,
     borderBottomRightRadius: 4,
+    borderWidth: 1,
+    borderColor: Colors.scoreGoldBorder,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: Colors.bgSurface,
+    backgroundColor: Colors.bgElevated,
     borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: Colors.border,
