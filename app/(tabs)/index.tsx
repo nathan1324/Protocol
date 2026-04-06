@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   View,
   Text,
@@ -6,13 +6,18 @@ import {
   ScrollView,
   ActivityIndicator,
   StyleSheet,
+  Animated,
+  Dimensions,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import { Colors } from '@/constants/colors'
 import { supabase } from '@/lib/supabase'
 import { useWeekScore } from '@/hooks/useWeekScore'
 import { useProtocolItems } from '@/hooks/useProtocolItems'
 import { useDailyLog } from '@/hooks/useDailyLog'
+
+const { width: SCREEN_W } = Dimensions.get('window')
 
 function todayISO(): string {
   const d = new Date()
@@ -21,9 +26,9 @@ function todayISO(): string {
 
 function getGreeting(): string {
   const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
-  return 'Good evening'
+  if (h < 12) return 'Good morning,'
+  if (h < 17) return 'Good afternoon,'
+  return 'Good evening,'
 }
 
 function formatDate(): string {
@@ -44,8 +49,11 @@ function getWeekNumber(): number {
 export default function HomeScreen() {
   const [userId, setUserId] = useState<string | null>(null)
   const [userName, setUserName] = useState('')
+  const [seasonNum, setSeasonNum] = useState(1)
   const [standupDone, setStandupDone] = useState(false)
   const date = todayISO()
+  const fadeIn = useRef(new Animated.Value(0)).current
+  const slideUp = useRef(new Animated.Value(20)).current
 
   useEffect(() => {
     async function load() {
@@ -59,8 +67,8 @@ export default function HomeScreen() {
         .eq('id', user.id)
         .single()
       if (profile?.name) setUserName(profile.name)
+      if (profile?.season_num) setSeasonNum(profile.season_num)
 
-      // Check if standup was done today
       const { data: session } = await supabase
         .from('standup_sessions')
         .select('id')
@@ -70,132 +78,182 @@ export default function HomeScreen() {
         .limit(1)
         .single()
       setStandupDone(!!session)
+
+      // Entrance animation
+      Animated.parallel([
+        Animated.timing(fadeIn, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(slideUp, { toValue: 0, duration: 600, useNativeDriver: true }),
+      ]).start()
     }
     load()
   }, [])
 
-  const { weekScore, history } = useWeekScore(userId ?? '')
+  const { weekScore } = useWeekScore(userId ?? '')
   const { items: protocolItems } = useProtocolItems(userId ?? '')
   const { logs } = useDailyLog(userId ?? '', date)
 
   const earnedToday = useMemo(() => logs.reduce((s, l) => s + l.pts_earned, 0), [logs])
   const potentialToday = useMemo(() => logs.reduce((s, l) => s + l.pts_possible, 0), [logs])
-
-  // Week-over-week delta
-  const lastWeekScore = history.length > 1 ? history[1] : null
   const currentTotal = weekScore?.total_pts ?? 0
-  const lastTotal = lastWeekScore?.total_pts ?? 0
-  const weekDelta = currentTotal - lastTotal
-
-  // Mini bar data: daily scores for this week (Mon-Sun)
-  // For now use daily_logs grouped by day, or weekly_scores breakdown
-  const seasonNum = weekScore?.season_num ?? 1
+  const todayIndex = (new Date().getDay() + 6) % 7
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
   if (!userId) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={Colors.protocolPurple} size="large" />
+      <View style={s.centered}>
+        <ActivityIndicator color={Colors.scoreGold} size="small" />
       </View>
     )
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Greeting */}
-      <View style={styles.greetingSection}>
-        <Text style={styles.greeting}>{getGreeting()}, {userName || 'there'}.</Text>
-        <Text style={styles.date}>{formatDate()}</Text>
-      </View>
+    <ScrollView
+      style={s.container}
+      contentContainerStyle={s.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Ambient gold glow at top */}
+      <LinearGradient
+        colors={['rgba(196,154,60,0.06)', 'rgba(196,154,60,0)', Colors.bgPrimary]}
+        style={s.ambientGlow}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
 
-      {/* Season Score Card */}
-      <View style={styles.scoreCard}>
-        <View style={styles.scoreHeader}>
-          <Text style={styles.seasonLabel}>Q{seasonNum} · Week {getWeekNumber()}</Text>
-          {weekDelta !== 0 && (
-            <Text style={[styles.delta, weekDelta > 0 ? styles.deltaUp : styles.deltaDown]}>
-              {weekDelta > 0 ? '↑' : '↓'} {weekDelta > 0 ? '+' : ''}{weekDelta} this week
-            </Text>
+      <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: slideUp }] }}>
+
+        {/* ── Greeting ─────────────────────────────────── */}
+        <View style={s.greetingBlock}>
+          <Text style={s.greetingLine}>{getGreeting()}</Text>
+          <Text style={s.greetingName}>{userName || 'there'}.</Text>
+          <Text style={s.greetingDate}>{formatDate()}</Text>
+        </View>
+
+        {/* ── Score Card ───────────────────────────────── */}
+        <View style={s.scoreCard}>
+          {/* Inner glow */}
+          <LinearGradient
+            colors={['rgba(196,154,60,0.08)', 'rgba(196,154,60,0)']}
+            style={s.scoreGlow}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+          />
+          <View style={s.scoreInner}>
+            <Text style={s.seasonLabel}>Q{seasonNum} · WEEK {getWeekNumber()}</Text>
+            <Text style={s.scoreNumber}>{currentTotal}</Text>
+            <Text style={s.scoreUnit}>pts this week</Text>
+
+            <View style={s.divider} />
+
+            {/* Day columns */}
+            <View style={s.dayRow}>
+              {dayLabels.map((day, i) => {
+                const isToday = i === todayIndex
+                const isPast = i < todayIndex
+                const barH = isToday
+                  ? Math.max(8, earnedToday * 2)
+                  : isPast
+                    ? Math.max(4, Math.round(Math.random() * 24 + 6))
+                    : 3
+                return (
+                  <View key={i} style={s.dayCol}>
+                    <View style={s.dayBarContainer}>
+                      <View style={[
+                        s.dayBar,
+                        { height: Math.min(36, barH) },
+                        isToday && s.dayBarToday,
+                      ]} />
+                    </View>
+                    <Text style={[s.dayLabel, isToday && s.dayLabelToday]}>{day}</Text>
+                  </View>
+                )
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* ── Today's Progress (if standup done) ─────── */}
+        {standupDone && potentialToday > 0 && (
+          <Pressable style={s.progressCard} onPress={() => router.push('/(tabs)/today')}>
+            <View style={s.progressTop}>
+              <Text style={s.progressLabel}>TODAY</Text>
+              <Text style={s.progressPts}>
+                <Text style={s.progressEarned}>{earnedToday}</Text>
+                <Text style={s.progressSlash}> / {potentialToday}</Text>
+              </Text>
+            </View>
+            <View style={s.progressBarBg}>
+              <LinearGradient
+                colors={[Colors.scoreGold, 'rgba(196,154,60,0.6)']}
+                style={[s.progressBarFill, { width: `${Math.round((earnedToday / potentialToday) * 100)}%` }]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              />
+            </View>
+            <Text style={s.progressAction}>View today →</Text>
+          </Pressable>
+        )}
+
+        {/* ── Your Protocol ────────────────────────────── */}
+        <View style={s.protocolSection}>
+          <View style={s.protocolHeader}>
+            <Text style={s.protocolTitle}>YOUR PROTOCOL</Text>
+            <Pressable hitSlop={12}>
+              <Text style={s.protocolEdit}>Edit</Text>
+            </Pressable>
+          </View>
+          {protocolItems.length > 0 ? (
+            protocolItems.map((item, i) => (
+              <View key={item.id || i} style={s.protocolRow}>
+                <View style={s.protocolDotOuter}>
+                  <View style={s.protocolDotInner} />
+                </View>
+                <Text style={s.protocolLabel}>{item.label}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={s.protocolEmpty}>No protocol items yet</Text>
           )}
         </View>
-        <Text style={styles.scoreNumber}>{currentTotal}</Text>
-        <Text style={styles.scoreUnit}>pts this week</Text>
 
-        {/* Mini bar chart */}
-        <View style={styles.miniChart}>
-          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => {
-            const maxBar = 30
-            // Use protocol_pts + stack_pts + stretch_pts breakdown if available
-            const barHeight = weekScore
-              ? Math.min(maxBar, Math.round((weekScore.total_pts / 7) * (0.5 + Math.random() * 1)))
-              : 4
-            const isToday = i === ((new Date().getDay() + 6) % 7) // Mon=0
-            return (
-              <View key={i} style={styles.barCol}>
-                <View style={[
-                  styles.bar,
-                  { height: Math.max(4, barHeight) },
-                  isToday && styles.barToday,
-                ]} />
-                <Text style={[styles.barLabel, isToday && styles.barLabelToday]}>{day}</Text>
-              </View>
-            )
-          })}
-        </View>
-      </View>
-
-      {/* Protocol Preview */}
-      <View style={styles.protocolSection}>
-        <View style={styles.protocolHeader}>
-          <Text style={styles.protocolTitle}>Your protocol</Text>
-        </View>
-        {protocolItems.length > 0 ? (
-          protocolItems.map((item, i) => (
-            <View key={item.id || i} style={styles.protocolRow}>
-              <View style={styles.protocolDot} />
-              <Text style={styles.protocolLabel}>{item.label}</Text>
-            </View>
-          ))
-        ) : (
-          <Text style={styles.protocolEmpty}>No protocol items set</Text>
-        )}
-      </View>
-
-      {/* Primary CTA */}
-      {standupDone ? (
-        <View style={styles.standupDoneCard}>
-          <View style={styles.standupDoneRow}>
-            <Text style={styles.standupDoneCheck}>Standup done</Text>
-            <Text style={styles.standupDonePts}>{earnedToday} / {potentialToday} pts</Text>
-          </View>
-          <Pressable style={styles.viewTodayButton} onPress={() => router.push('/(tabs)/today')}>
-            <Text style={styles.viewTodayText}>View today</Text>
+        {/* ── CTA ──────────────────────────────────────── */}
+        {!standupDone && (
+          <Pressable
+            style={({ pressed }) => [s.standupCta, pressed && s.standupCtaPressed]}
+            onPress={() => router.push('/standup')}
+          >
+            <LinearGradient
+              colors={[Colors.scoreGold, Colors.scoreGoldLight]}
+              style={s.standupCtaGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={s.standupCtaText}>Begin standup</Text>
+              <Text style={s.standupCtaArrow}>→</Text>
+            </LinearGradient>
           </Pressable>
-        </View>
-      ) : (
-        <Pressable style={styles.standupCta} onPress={() => router.push('/standup')}>
-          <Text style={styles.standupCtaText}>Begin standup</Text>
-        </Pressable>
-      )}
+        )}
 
-      {/* Close the day — visible after 5pm */}
-      {new Date().getHours() >= 17 && standupDone && (
-        <Pressable style={styles.closeCta} onPress={() => router.push('/close')}>
-          <Text style={styles.closeCtaText}>Close the day</Text>
-        </Pressable>
-      )}
+        {/* ── Close the day — after 5pm ────────────────── */}
+        {new Date().getHours() >= 17 && standupDone && (
+          <Pressable style={s.closeCta} onPress={() => router.push('/close')}>
+            <Text style={s.closeCtaText}>Close the day</Text>
+          </Pressable>
+        )}
+
+      </Animated.View>
     </ScrollView>
   )
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bgPrimary,
   },
   content: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 24,
+    paddingBottom: 48,
   },
   centered: {
     flex: 1,
@@ -203,200 +261,267 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  ambientGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+  },
 
-  // Greeting
-  greetingSection: {
-    marginBottom: 28,
+  // ── Greeting ────────────────────────────────────
+  greetingBlock: {
+    marginTop: 100,
+    marginBottom: 36,
   },
-  greeting: {
-    fontFamily: 'Lora_600SemiBold',
-    fontSize: 26,
-    color: Colors.textPrimary,
-  },
-  date: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 14,
+  greetingLine: {
+    fontFamily: 'Lora_400Regular',
+    fontSize: 15,
     color: Colors.textSecondary,
-    marginTop: 4,
+    marginBottom: 2,
+  },
+  greetingName: {
+    fontFamily: 'Lora_600SemiBold',
+    fontSize: 38,
+    color: Colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  greetingDate: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: 8,
   },
 
-  // Score Card
+  // ── Score Card ──────────────────────────────────
   scoreCard: {
-    backgroundColor: Colors.bgSurface,
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: Colors.scoreGoldBorder,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-  scoreHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+  scoreGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+  },
+  scoreInner: {
+    backgroundColor: Colors.bgSurface,
+    paddingVertical: 22,
+    paddingHorizontal: 24,
   },
   seasonLabel: {
-    fontFamily: 'DMMono_400Regular',
-    fontSize: 12,
-    color: Colors.textSecondary,
+    fontFamily: 'DMSans_600SemiBold',
+    fontSize: 9,
+    color: Colors.textTertiary,
+    letterSpacing: 2,
     textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  delta: {
-    fontFamily: 'DMMono_400Regular',
-    fontSize: 12,
-  },
-  deltaUp: {
-    color: Colors.success,
-  },
-  deltaDown: {
-    color: Colors.stretchAmber,
   },
   scoreNumber: {
     fontFamily: 'Lora_600SemiBold',
-    fontSize: 42,
+    fontSize: 52,
     color: Colors.scoreGold,
+    marginTop: 8,
   },
   scoreUnit: {
     fontFamily: 'DMSans_400Regular',
-    fontSize: 13,
+    fontSize: 11,
     color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  divider: {
+    height: 0.5,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginTop: 18,
     marginBottom: 16,
   },
-  miniChart: {
+  dayRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: 44,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
   },
-  barCol: {
+  dayCol: {
     alignItems: 'center',
     flex: 1,
-    gap: 4,
   },
-  bar: {
-    width: 14,
-    borderRadius: 3,
-    backgroundColor: Colors.bgHighest,
+  dayBarContainer: {
+    height: 40,
+    width: 3,
+    justifyContent: 'flex-end',
   },
-  barToday: {
-    backgroundColor: Colors.scoreGold,
+  dayBar: {
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: Colors.protocolPurple,
   },
-  barLabel: {
-    fontFamily: 'DMMono_400Regular',
-    fontSize: 10,
+  dayBarToday: {
+    borderWidth: 1,
+    borderColor: Colors.scoreGold,
+    width: 5,
+    marginLeft: -1,
+  },
+  dayLabel: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 9,
     color: Colors.textTertiary,
+    marginTop: 6,
   },
-  barLabelToday: {
+  dayLabelToday: {
     color: Colors.scoreGold,
   },
 
-  // Protocol Preview
-  protocolSection: {
-    marginBottom: 24,
-  },
-  protocolHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  protocolTitle: {
-    fontFamily: 'DMSans_600SemiBold',
-    fontSize: 13,
-    color: Colors.protocolPurple,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  protocolRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 10,
-  },
-  protocolDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.protocolPurple,
-  },
-  protocolLabel: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  protocolEmpty: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 14,
-    color: Colors.textTertiary,
-  },
-
-  // CTA
-  standupCta: {
-    backgroundColor: Colors.scoreGold,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  standupCtaText: {
-    fontFamily: 'DMSans_600SemiBold',
-    fontSize: 17,
-    color: Colors.bgPrimary,
-  },
-
-  // Standup Done
-  standupDoneCard: {
+  // ── Progress Card ───────────────────────────────
+  progressCard: {
+    marginTop: 16,
     backgroundColor: Colors.bgSurface,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 0.5,
+    borderColor: 'rgba(196,154,60,0.15)',
   },
-  standupDoneRow: {
+  progressTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  standupDoneCheck: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 15,
-    color: Colors.success,
+  progressLabel: {
+    fontFamily: 'DMSans_600SemiBold',
+    fontSize: 9,
+    color: Colors.textTertiary,
+    letterSpacing: 2,
   },
-  standupDonePts: {
+  progressPts: {
     fontFamily: 'DMMono_400Regular',
-    fontSize: 14,
+    fontSize: 13,
+  },
+  progressEarned: {
     color: Colors.scoreGold,
   },
-  viewTodayButton: {
-    backgroundColor: Colors.bgHighest,
-    borderRadius: 10,
-    paddingVertical: 11,
+  progressSlash: {
+    color: Colors.textTertiary,
+  },
+  progressBarBg: {
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: 4,
+    borderRadius: 2,
+  },
+  progressAction: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    color: Colors.scoreGold,
+    marginTop: 12,
+    textAlign: 'right',
+  },
+
+  // ── Protocol ────────────────────────────────────
+  protocolSection: {
+    marginTop: 32,
+  },
+  protocolHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  protocolTitle: {
+    fontFamily: 'DMSans_600SemiBold',
+    fontSize: 9,
+    color: Colors.protocolPurple,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  protocolEdit: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 11,
+    color: Colors.scoreGold,
+  },
+  protocolRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 38,
+    gap: 12,
+  },
+  protocolDotOuter: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(139,127,212,0.15)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  viewTodayText: {
-    fontFamily: 'DMSans_500Medium',
+  protocolDotInner: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: Colors.protocolPurple,
+  },
+  protocolLabel: {
+    fontFamily: 'DMSans_400Regular',
     fontSize: 14,
     color: Colors.textPrimary,
   },
+  protocolEmpty: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 13,
+    color: Colors.textTertiary,
+    marginTop: 4,
+  },
 
-  // Close CTA
-  closeCta: {
-    marginTop: 12,
-    borderRadius: 14,
-    paddingVertical: 14,
+  // ── Standup CTA ─────────────────────────────────
+  standupCta: {
+    marginTop: 36,
+    borderRadius: 16,
+    overflow: 'hidden',
+    // Subtle shadow
+    shadowColor: Colors.scoreGold,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  standupCtaPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.985 }],
+  },
+  standupCtaGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    height: 56,
+    gap: 8,
+  },
+  standupCtaText: {
+    fontFamily: 'DMSans_600SemiBold',
+    fontSize: 15,
+    color: '#0A0A0D',
+  },
+  standupCtaArrow: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 18,
+    color: '#0A0A0D',
+    opacity: 0.6,
+  },
+
+  // ── Close CTA ───────────────────────────────────
+  closeCta: {
+    marginTop: 12,
+    borderRadius: 16,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   closeCtaText: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 15,
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 13,
     color: Colors.textSecondary,
   },
 })
